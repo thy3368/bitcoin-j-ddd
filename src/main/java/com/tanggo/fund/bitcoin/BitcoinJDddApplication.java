@@ -1,4 +1,4 @@
-package com.tanggo.fund.bitcoinjddd;
+package com.tanggo.fund.bitcoin;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

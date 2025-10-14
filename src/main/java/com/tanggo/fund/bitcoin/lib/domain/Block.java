@@ -1,4 +1,4 @@
-package com.tanggo.fund.bitcoinjddd.lib.domain;
+package com.tanggo.fund.bitcoin.lib.domain;
 
 import java.util.List;
 

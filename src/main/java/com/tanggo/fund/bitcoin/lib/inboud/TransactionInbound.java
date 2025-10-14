@@ -1,8 +1,8 @@
-package com.tanggo.fund.bitcoinjddd.lib.inboud;
+package com.tanggo.fund.bitcoin.lib.inboud;
 
 
-import com.tanggo.fund.bitcoinjddd.lib.domain.Command;
-import com.tanggo.fund.bitcoinjddd.lib.service.TransactionApps;
+import com.tanggo.fund.bitcoin.lib.domain.Command;
+import com.tanggo.fund.bitcoin.lib.service.TransactionApps;
 
 public class TransactionInbound {
 

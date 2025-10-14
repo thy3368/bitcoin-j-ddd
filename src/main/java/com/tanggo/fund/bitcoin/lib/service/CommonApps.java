@@ -1,7 +1,7 @@
-package com.tanggo.fund.bitcoinjddd.lib.service;
+package com.tanggo.fund.bitcoin.lib.service;
 
 
-import com.tanggo.fund.bitcoinjddd.lib.domain.Command;
+import com.tanggo.fund.bitcoin.lib.domain.Command;
 
 public class CommonApps {
 
