@@ -5,6 +5,7 @@
 - 写/Users/hongyaotang/src/bitcoin-j-ddd/design/alpha.md 分析币安 alpha架构
 - 写/Users/hongyaotang/src/bitcoin-j-ddd/design/aster.md 分析币安 aster的实现
 - 写/Users/hongyaotang/src/bitcoin-j-ddd/design/xlayer.md okb xlayer的实现
+- 写/Users/hongyaotang/src/bitcoin-j-ddd/design/cex-perp.md 设计 中心化 永续合约 架构 用java
 
 
 - 对交易技术感兴趣， 中心化限价订单薄，限价单，市场单，成交单，行情数据；接下来探索中心化永续合约
