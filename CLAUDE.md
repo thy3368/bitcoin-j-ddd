@@ -16,7 +16,7 @@ This is a Bitcoin implementation using Domain-Driven Design (DDD) principles in 
 
 ## Technology Stack
 
-- **Language**: Java 25
+- **Language**: Java 21
 - **Framework**: Spring Boot 4.0.0-M3
 - **Build Tool**: Maven (with Maven wrapper)
 - **Native Support**: GraalVM for AOT compilation
