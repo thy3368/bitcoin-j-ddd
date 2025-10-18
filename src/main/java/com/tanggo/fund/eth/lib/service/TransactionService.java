@@ -12,7 +12,6 @@ public class TransactionService {
 
     private TxPoolRepo txPoolRepo;
     private AccountRepo accountRepo;
-
     private ReceiptRepo receiptRepo;
 
     void create() {
@@ -35,7 +34,6 @@ public class TransactionService {
     void StatefulValidation() {
 
         Eip1559Transaction transaction = txPoolRepo.query();
-
         Account sender = accountRepo.query("sender");
         Account recipient = accountRepo.query("recipient");
 
@@ -45,18 +43,13 @@ public class TransactionService {
     void execute() {
 
         Eip1559Transaction transaction = txPoolRepo.query();
-
         Account sender = accountRepo.query("sender");
         sender.decute(2 + 2);
-
         Account recipient = accountRepo.query("recipient");
-
         Receipt receipt = null;
-
         accountRepo.update(sender);
         accountRepo.update(recipient);
         receiptRepo.save(receipt);
-
         Block block = new Block();
         block.getBlockBody().getTransactions().add(transaction);
 
