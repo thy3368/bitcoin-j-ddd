@@ -63,6 +63,12 @@
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
         </dependency>
+        <!-- LMDB-Java - 高性能键值存储 -->
+        <dependency>
+            <groupId>org.lmdbjava</groupId>
+            <artifactId>lmdbjava</artifactId>
+            <version>0.8.3</version>
+        </dependency>
     </dependencies>
 
     <build>
