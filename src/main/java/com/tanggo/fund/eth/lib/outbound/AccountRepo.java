@@ -1,6 +1,7 @@
 package com.tanggo.fund.eth.lib.outbound;
 
 import com.tanggo.fund.eth.lib.domain.Account;
+import com.tanggo.fund.eth.lib.domain.repo.IAccountRepo;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +24,7 @@ import static org.lmdbjava.EnvFlags.MDB_NOTLS;
  */
 @Slf4j
 @Repository
-public class AccountRepo {
+public class AccountRepo implements IAccountRepo {
 
     private Env<ByteBuffer> env;
     private Dbi<ByteBuffer> db;
@@ -84,6 +85,7 @@ public class AccountRepo {
      * @param address 账户地址
      * @return Account对象，如果不存在则返回null
      */
+    @Override
     public Account query(String address) {
         if (address == null || address.isEmpty()) {
             return null;
@@ -113,6 +115,7 @@ public class AccountRepo {
      * 使用Account对象自身的address作为key
      * @param account Account对象
      */
+    @Override
     public void update(Account account) {
         if (account == null) {
             log.warn("Cannot update null account");
