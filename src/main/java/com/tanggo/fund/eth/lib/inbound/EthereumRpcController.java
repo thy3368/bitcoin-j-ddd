@@ -1,4 +1,4 @@
-package com.tanggo.fund.eth.lib.inbound.controller;
+package com.tanggo.fund.eth.lib.inbound;
 
 import com.tanggo.fund.eth.lib.service.EthereumApplicationService;
 import org.springframework.beans.factory.annotation.Autowired;
