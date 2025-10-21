@@ -24,9 +24,8 @@ public class ProxyLogEntryService implements ILogEntryService {
      * 构造函数
      *
      * @param rpcUrl Raft 节点的 JSON-RPC 端点 URL (例如: http://localhost:8080/raft/rpc)
-     * @param nodes
      */
-    public ProxyLogEntryService(String rpcUrl, Map<String, ILogEntryService> nodes) {
+    public ProxyLogEntryService(String rpcUrl) {
         this.rpcUrl = rpcUrl;
         this.rpcClient = createRpcClient(rpcUrl);
     }
@@ -80,6 +79,18 @@ public class ProxyLogEntryService implements ILogEntryService {
             System.err.println("远程调用 handleAppendEntries 失败: " + e.getMessage());
             // 返回失败响应
             return new AppendEntriesResponse(0, false, -1);
+        }
+    }
+
+    /**
+     * 打印日志 - 通过 JSON-RPC 远程调用
+     */
+    @Override
+    public void printLog() {
+        try {
+            rpcClient.printLog();
+        } catch (Exception e) {
+            System.err.println("远程调用 printLog 失败: " + e.getMessage());
         }
     }
 

@@ -15,9 +15,9 @@ public class RaftClusterDemo2 {
         Map<String, ILogEntryService> nodes = new ConcurrentHashMap<>();
 
 
-        ILogEntryService node1 = new ProxyLogEntryService("node1", nodes);
-        ILogEntryService node2 = new ProxyLogEntryService("node2", nodes);
-        ILogEntryService node3 = new ProxyLogEntryService("node3", nodes);
+        ILogEntryService node1 = new ProxyLogEntryService("http://localhost:8545/raft/rpc");
+        ILogEntryService node2 = new ProxyLogEntryService("http://localhost:8546/raft/rpc");
+        ILogEntryService node3 = new ProxyLogEntryService("http://localhost:8547/raft/rpc");
         nodes.put("node1", node1);
         nodes.put("node2", node2);
         nodes.put("node3", node3);
