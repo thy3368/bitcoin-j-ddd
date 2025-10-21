@@ -1,4 +1,4 @@
-package com.tanggo.fund.eth.lib.domain;
+package com.tanggo.fund.eth.lib.domain.other;
 
 import java.math.BigInteger;
 import java.util.Stack;

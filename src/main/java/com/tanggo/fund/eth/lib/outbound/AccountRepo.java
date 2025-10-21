@@ -122,13 +122,14 @@ public class AccountRepo implements IAccountRepo {
             return;
         }
 
-        String address = account.getAddress();
-        if (address == null || address.isEmpty()) {
+        byte[] address = account.getAddress();
+        if (address == null || address.length == 0) {
             log.error("Account address is null or empty, cannot save to MDBX");
             throw new IllegalArgumentException("Account must have a valid address");
         }
 
-        update(address, account);
+        String addressHex = account.getAddressHex();
+        update(addressHex, account);
     }
 
     /**
@@ -159,31 +160,35 @@ public class AccountRepo implements IAccountRepo {
 
     /**
      * 序列化Account对象为ByteBuffer
-     * 格式: [address长度(4字节)][address][nonce(4字节)][balance(4字节)][bytecode_hash长度(4字节)][bytecode_hash]
+     * 格式: [address(20字节)][nonce长度(4字节)][nonce][balance长度(4字节)][balance]
+     *       [storageRoot(32字节)][codeHash(32字节)]
      */
     private ByteBuffer serialize(Account account) {
-        byte[] addressBytes = account.getAddress() != null
-                ? account.getAddress().getBytes(StandardCharsets.UTF_8)
-                : new byte[0];
+        byte[] addressBytes = account.getAddress() != null ? account.getAddress() : new byte[20];
+        byte[] nonceBytes = account.getNonce() != null ? account.getNonce().toByteArray() : new byte[0];
+        byte[] balanceBytes = account.getBalance() != null ? account.getBalance().toByteArray() : new byte[0];
+        byte[] storageRoot = account.getStorageRoot() != null ? account.getStorageRoot() : new byte[32];
+        byte[] codeHash = account.getCodeHash() != null ? account.getCodeHash() : new byte[32];
 
-        byte[] hashBytes = account.getBytecode_hash() != null
-                ? account.getBytecode_hash().getBytes(StandardCharsets.UTF_8)
-                : new byte[0];
-
-        int bufferSize = 4 + addressBytes.length + 4 + 4 + 4 + hashBytes.length;
+        int bufferSize = 20 + 4 + nonceBytes.length + 4 + balanceBytes.length + 32 + 32;
         ByteBuffer buffer = ByteBuffer.allocateDirect(bufferSize);
 
-        // 写入address
-        buffer.putInt(addressBytes.length);
+        // 写入address (固定20字节)
         buffer.put(addressBytes);
 
-        // 写入账户数据
-        buffer.putInt(account.getNonce());
-        buffer.putInt(account.getBalance());
+        // 写入nonce
+        buffer.putInt(nonceBytes.length);
+        buffer.put(nonceBytes);
 
-        // 写入bytecode_hash
-        buffer.putInt(hashBytes.length);
-        buffer.put(hashBytes);
+        // 写入balance
+        buffer.putInt(balanceBytes.length);
+        buffer.put(balanceBytes);
+
+        // 写入storageRoot (固定32字节)
+        buffer.put(storageRoot);
+
+        // 写入codeHash (固定32字节)
+        buffer.put(codeHash);
 
         buffer.flip();
         return buffer;
@@ -193,28 +198,38 @@ public class AccountRepo implements IAccountRepo {
      * 反序列化ByteBuffer为Account对象
      */
     private Account deserialize(ByteBuffer buffer) {
-        Account account = new Account();
+        // 读取address (20字节)
+        byte[] addressBytes = new byte[20];
+        buffer.get(addressBytes);
 
-        // 读取address
-        int addressLen = buffer.getInt();
-        if (addressLen > 0) {
-            byte[] addressBytes = new byte[addressLen];
-            buffer.get(addressBytes);
-            account.setAddress(new String(addressBytes, StandardCharsets.UTF_8));
+        // 读取nonce
+        int nonceLen = buffer.getInt();
+        byte[] nonceBytes = new byte[nonceLen];
+        if (nonceLen > 0) {
+            buffer.get(nonceBytes);
         }
 
-        // 读取账户数据
-        account.setNonce(buffer.getInt());
-        account.setBalance(buffer.getInt());
-
-        // 读取bytecode_hash
-        int hashLen = buffer.getInt();
-        if (hashLen > 0) {
-            byte[] hashBytes = new byte[hashLen];
-            buffer.get(hashBytes);
-            account.setBytecode_hash(new String(hashBytes, StandardCharsets.UTF_8));
+        // 读取balance
+        int balanceLen = buffer.getInt();
+        byte[] balanceBytes = new byte[balanceLen];
+        if (balanceLen > 0) {
+            buffer.get(balanceBytes);
         }
 
-        return account;
+        // 读取storageRoot (32字节)
+        byte[] storageRoot = new byte[32];
+        buffer.get(storageRoot);
+
+        // 读取codeHash (32字节)
+        byte[] codeHash = new byte[32];
+        buffer.get(codeHash);
+
+        return Account.builder()
+                .address(addressBytes)
+                .nonce(nonceLen > 0 ? new java.math.BigInteger(nonceBytes) : java.math.BigInteger.ZERO)
+                .balance(balanceLen > 0 ? new java.math.BigInteger(balanceBytes) : java.math.BigInteger.ZERO)
+                .storageRoot(storageRoot)
+                .codeHash(codeHash)
+                .build();
     }
 }
