@@ -1,4 +1,4 @@
-package com.tanggo.fund.raft.service;
+package com.tanggo.fund.raft.service.command.impl;
 
 
 import com.tanggo.fund.raft.domain.LogEntry;
@@ -6,6 +6,7 @@ import com.tanggo.fund.raft.domain.PeerRaftNode;
 import com.tanggo.fund.raft.domain.RaftNode;
 import com.tanggo.fund.raft.outbound.LogEntryRepo;
 import com.tanggo.fund.raft.outbound.PeerRaftNodeRepo;
+import com.tanggo.fund.raft.service.ILogEntryService;
 import com.tanggo.fund.raft.service.command.AppendEntriesCommand;
 import com.tanggo.fund.raft.service.command.AppendEntriesResponse;
 
@@ -17,19 +18,20 @@ import java.util.concurrent.*;
 
 // 节点状态枚举
 
-public class LogEntryService {
+public class LogEntryService implements ILogEntryService {
 
     private final RaftNode currentNode; //当前节点信息
     private final ScheduledExecutorService scheduler;
+    private final Map<String, ILogEntryService> nodes;
     private PeerRaftNodeRepo peerRaftNodeRepo;
     private LogEntryRepo logEntryRepo;
     private ScheduledFuture<?> heartbeatTask;
 
-    public LogEntryService(String node1, Map<String, LogEntryService> nodes) {
+    public LogEntryService(String node1, Map<String, ILogEntryService> nodes) {
 
         currentNode = new RaftNode("ss", null);
         this.scheduler = Executors.newScheduledThreadPool(3);
-
+        this.nodes = nodes;
         // 启动定时任务
         startElectionTimeout();
 
@@ -37,6 +39,7 @@ public class LogEntryService {
 
 
     // 处理客户端请求（仅领导者）
+    @Override
     public synchronized boolean handleClientCommand(String command) {
         if (!currentNode.isLeader()) {
             System.out.println("重定向到领导者: 本节点不是领导者");
@@ -44,11 +47,12 @@ public class LogEntryService {
         }
 
         // 创建新日志条目
+        List<LogEntry> log = logEntryRepo.query();
         int newIndex = log.size();
-        LogEntry newEntry = new LogEntry(currentTerm, newIndex, command);
+        LogEntry newEntry = new LogEntry(currentNode.getNodeId(), currentNode.getCurrentTerm(), newIndex, command);
 
         logEntryRepo.insert(newEntry);
-//        System.out.println("领导者节点 " + nodeId + " 追加日志: " + command + " (索引: " + newIndex + ")");
+        System.out.println("领导者节点 " + currentNode.getNodeId() + " 追加日志: " + command + " (索引: " + newIndex + ")");
 
         // 开始复制到从节点
         replicateLog();
@@ -59,7 +63,7 @@ public class LogEntryService {
     private void replicateLog() {
         Map<String, PeerRaftNode> clusterNodes = peerRaftNodeRepo.query();
         for (String followerId : clusterNodes.keySet()) {
-            if (!followerId.equals(nodeId)) {
+            if (!followerId.equals(currentNode.getNodeId())) {
                 // 异步发送日志条目
                 CompletableFuture.runAsync(() -> sendAppendEntries(followerId));
             }
@@ -68,7 +72,8 @@ public class LogEntryService {
 
     // 发送日志追加请求
     private void sendAppendEntries(String followerId) {
-        int nextIdx = nextIndex.getOrDefault(followerId, 0);
+        List<LogEntry> log = logEntryRepo.query();
+        int nextIdx = currentNode.getNextIndex().getOrDefault(followerId, 0);
 
         // 检查是否有新日志需要发送
         if (nextIdx <= log.size() - 1) {
@@ -80,17 +85,16 @@ public class LogEntryService {
             int prevLogIndex = nextIdx - 1;
             int prevLogTerm = (prevLogIndex >= 0 && prevLogIndex < log.size()) ? log.get(prevLogIndex).getTerm() : 0;
 
-            AppendEntriesCommand request = new AppendEntriesCommand(currentTerm, prevLogIndex, prevLogTerm, entries, commitIndex);
+            AppendEntriesCommand request = new AppendEntriesCommand(currentNode.getCurrentTerm(), prevLogIndex, prevLogTerm, entries, currentNode.getCommitIndex());
 
             try {
                 // 模拟网络发送（实际实现需使用HTTP/gRPC）
-//                RaftNode follower = clusterNodes.get(followerId);
-
-                LogEntryService follower = null;
-                AppendEntriesResponse response = follower.handleAppendEntries(request);
-
-                // 处理响应
-                processAppendResponse(followerId, response, nextIdx, entries.size());
+                ILogEntryService follower = nodes.get(followerId);
+                if (follower != null) {
+                    AppendEntriesResponse response = follower.handleAppendEntries(request);
+                    // 处理响应
+                    processAppendResponse(followerId, response, nextIdx, entries.size());
+                }
             } catch (Exception e) {
                 System.err.println("向节点 " + followerId + " 发送日志失败: " + e.getMessage());
             }
@@ -101,25 +105,28 @@ public class LogEntryService {
     }
 
     // 处理追加日志请求（跟随者侧）
+    @Override
     public synchronized AppendEntriesResponse handleAppendEntries(AppendEntriesCommand request) {
         // 重置选举超时（收到领导者消息）
         resetElectionTimeout();
 
+        List<LogEntry> log = logEntryRepo.query();
+
         // 1. 任期检查
-        if (request.getTerm() < currentTerm) {
-            return new AppendEntriesResponse(currentTerm, false, log.size() - 1);
+        if (request.getTerm() < currentNode.getCurrentTerm()) {
+            return new AppendEntriesResponse(currentNode.getCurrentTerm(), false, log.size() - 1);
         }
 
         // 更新任期（如果请求任期更大）
-        if (request.getTerm() > currentTerm) {
-            currentTerm = request.getTerm();
+        if (request.getTerm() > currentNode.getCurrentTerm()) {
+            currentNode.setCurrentTerm(request.getTerm());
             becomeFollower();
         }
 
         // 2. 日志一致性检查
         if (request.getPrevLogIndex() >= 0) {
             if (log.size() <= request.getPrevLogIndex() || (request.getPrevLogIndex() >= 0 && log.get(request.getPrevLogIndex()).getTerm() != request.getPrevLogTerm())) {
-                return new AppendEntriesResponse(currentTerm, false, log.size() - 1);
+                return new AppendEntriesResponse(currentNode.getCurrentTerm(), false, log.size() - 1);
             }
         }
 
@@ -143,31 +150,32 @@ public class LogEntryService {
         }
 
         // 4. 更新提交索引
-        if (request.getLeaderCommit() > commitIndex) {
-            commitIndex = Math.min(request.getLeaderCommit(), log.size() - 1);
+        if (request.getLeaderCommit() > currentNode.getCommitIndex()) {
+            currentNode.setCommitIndex(Math.min(request.getLeaderCommit(), log.size() - 1));
             applyCommittedEntries();
         }
 
-        return new AppendEntriesResponse(currentTerm, true, log.size() - 1);
+        return new AppendEntriesResponse(currentNode.getCurrentTerm(), true, log.size() - 1);
     }
 
     // 应用已提交的日志到状态机
     private void applyCommittedEntries() {
-        while (lastApplied < commitIndex) {
-            lastApplied++;
-            LogEntry entry = log.get(lastApplied);
+        List<LogEntry> log = logEntryRepo.query();
+        while (currentNode.getLastApplied() < currentNode.getCommitIndex()) {
+            currentNode.setLastApplied(currentNode.getLastApplied() + 1);
+            LogEntry entry = log.get(currentNode.getLastApplied());
             entry.setCommitted(true);
 
             // 实际应用中这里应该执行命令并更新状态机
-            System.out.println("节点 " + nodeId + " 应用日志[" + lastApplied + "]: " + entry.getCommand());
+            System.out.println("节点 " + currentNode.getNodeId() + " 应用日志[" + currentNode.getLastApplied() + "]: " + entry.getCommand());
         }
     }
 
     // 处理追加日志响应（领导者侧）
     private synchronized void processAppendResponse(String followerId, AppendEntriesResponse response, int sentIndex, int entryCount) {
-        if (response.getTerm() > currentTerm) {
+        if (response.getTerm() > currentNode.getCurrentTerm()) {
             // 发现更高任期，转为跟随者
-            currentTerm = response.getTerm();
+            currentNode.setCurrentTerm(response.getTerm());
             becomeFollower();
             return;
         }
@@ -175,21 +183,22 @@ public class LogEntryService {
         if (response.isSuccess()) {
             // 更新对应从节点的匹配索引
             int newMatchIndex = sentIndex + entryCount - 1;
-            matchIndex.put(followerId, newMatchIndex);
-            nextIndex.put(followerId, newMatchIndex + 1);
+            currentNode.getMatchIndex().put(followerId, newMatchIndex);
+            currentNode.getNextIndex().put(followerId, newMatchIndex + 1);
 
             // 检查是否可以提交日志
             updateCommitIndex();
         } else {
             // 复制失败，回退nextIndex重试
-            nextIndex.put(followerId, Math.max(sentIndex - 1, 0));
+            currentNode.getNextIndex().put(followerId, Math.max(sentIndex - 1, 0));
         }
     }
 
     // 更新提交索引（领导者）
     private void updateCommitIndex() {
+        List<LogEntry> log = logEntryRepo.query();
         // 收集所有匹配索引
-        List<Integer> matchIndexes = new ArrayList<>(matchIndex.values());
+        List<Integer> matchIndexes = new ArrayList<>(currentNode.getMatchIndex().values());
         matchIndexes.add(log.size() - 1); // 包括领导者自己
 
         // 排序并找到中位数（多数节点已复制的索引）
@@ -197,13 +206,14 @@ public class LogEntryService {
         int newCommitIndex = matchIndexes.get(matchIndexes.size() / 2);
 
         // 只能提交当前任期的日志
-        if (newCommitIndex > commitIndex && newCommitIndex < log.size() && log.get(newCommitIndex).getTerm() == currentTerm) {
-            commitIndex = newCommitIndex;
+        if (newCommitIndex > currentNode.getCommitIndex() && newCommitIndex < log.size() && log.get(newCommitIndex).getTerm() == currentNode.getCurrentTerm()) {
+            currentNode.setCommitIndex(newCommitIndex);
             applyCommittedEntries();
 
             // 通知从节点提交日志
+            Map<String, PeerRaftNode> clusterNodes = peerRaftNodeRepo.query();
             for (String followerId : clusterNodes.keySet()) {
-                if (!followerId.equals(nodeId)) {
+                if (!followerId.equals(currentNode.getNodeId())) {
                     sendHeartbeat(followerId);
                 }
             }
@@ -212,12 +222,15 @@ public class LogEntryService {
 
     // 发送心跳包
     private void sendHeartbeat(String followerId) {
-        AppendEntriesMessage heartbeat = new AppendEntriesMessage(currentTerm, log.size() - 1, log.isEmpty() ? 0 : log.get(log.size() - 1).getTerm(), null, commitIndex);
+        List<LogEntry> log = logEntryRepo.query();
+        AppendEntriesCommand heartbeat = new AppendEntriesCommand(currentNode.getCurrentTerm(), log.size() - 1, log.isEmpty() ? 0 : log.get(log.size() - 1).getTerm(), null, currentNode.getCommitIndex());
 
         CompletableFuture.runAsync(() -> {
             try {
-                RaftNode follower = clusterNodes.get(followerId);
-                follower.handleAppendEntries(heartbeat);
+                ILogEntryService follower = nodes.get(followerId);
+                if (follower != null) {
+                    follower.handleAppendEntries(heartbeat);
+                }
             } catch (Exception e) {
                 System.err.println("向节点 " + followerId + " 发送心跳失败: " + e.getMessage());
             }
@@ -231,20 +244,21 @@ public class LogEntryService {
         }
 
         heartbeatTask = scheduler.scheduleAtFixedRate(() -> {
-            if (state == State.LEADER) {
+            if (currentNode.getState() == RaftNode.State.LEADER) {
+                Map<String, PeerRaftNode> clusterNodes = peerRaftNodeRepo.query();
                 for (String followerId : clusterNodes.keySet()) {
-                    if (!followerId.equals(nodeId)) {
+                    if (!followerId.equals(currentNode.getNodeId())) {
                         sendHeartbeat(followerId);
                     }
                 }
             }
-        }, 0, HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
+        }, 0, RaftNode.HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
     }
 
     // 状态转换方法
     private void becomeFollower() {
-        state = State.FOLLOWER;
-        votedFor = null;
+        currentNode.setState(RaftNode.State.FOLLOWER);
+        currentNode.setVotedFor(null);
         startElectionTimeout();
         if (heartbeatTask != null) {
             heartbeatTask.cancel(true);
@@ -254,10 +268,12 @@ public class LogEntryService {
     private void becomeLeader() {
         currentNode.becomeLeader();
 
+        List<LogEntry> log = logEntryRepo.query();
         // 初始化领导者状态
+        Map<String, PeerRaftNode> clusterNodes = peerRaftNodeRepo.query();
         for (String nodeId : clusterNodes.keySet()) {
-            nextIndex.put(nodeId, log.size());
-            matchIndex.put(nodeId, -1);
+            currentNode.getNextIndex().put(nodeId, log.size());
+            currentNode.getMatchIndex().put(nodeId, -1);
         }
 
         startHeartbeat();
@@ -283,6 +299,7 @@ public class LogEntryService {
     }
 
     // 工具方法
+    @Override
     public void printLog() {
 
         currentNode.printLog();

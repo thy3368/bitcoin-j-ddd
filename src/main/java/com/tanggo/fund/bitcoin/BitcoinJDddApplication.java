@@ -7,7 +7,8 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @ComponentScan(basePackages = {
         "com.tanggo.fund.bitcoin",
-        "com.tanggo.fund.eth"
+        "com.tanggo.fund.eth",
+        "com.tanggo.fund.raft"
 })
 public class BitcoinJDddApplication {
 

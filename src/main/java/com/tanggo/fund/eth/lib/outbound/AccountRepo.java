@@ -23,7 +23,7 @@ import static org.lmdbjava.EnvFlags.MDB_NOTLS;
  * MDBX是一个高性能、轻量级的嵌入式键值存储库
  */
 @Slf4j
-@Repository
+//@Repository
 public class AccountRepo implements IAccountRepo {
 
     private Env<ByteBuffer> env;
