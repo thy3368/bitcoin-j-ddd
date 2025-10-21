@@ -16,6 +16,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,7 +29,24 @@ import static org.mockito.Mockito.*;
  *
  * 演示以太坊转账的完整流程
  */
+@ExtendWith(MockitoExtension.class)
 class WalletServiceTest {
+
+    @Mock
+    private WalletRepository walletRepository;
+
+    @Mock
+    private AccountRepo accountRepository;
+
+    @Mock
+    private CryptoService cryptoService;
+
+    private TransferService transferService;
+
+    @BeforeEach
+    void setUp() {
+        transferService = new TransferService(walletRepository, accountRepository, cryptoService);
+    }
 
     /**
      * 测试：以太坊转账完整流程
@@ -40,22 +59,49 @@ class WalletServiceTest {
      * 5. 验证转账结果
      */
     @Test
-    @Disabled("需要实现CryptoService和WalletRepository")
     void testEthereumTransfer() {
-        // TODO: 实现完整的转账测试
-        // 1. 创建Mock依赖
-        // 2. 创建钱包
-        // 3. 执行转账
-        // 4. 验证结果
-
-        /*
         // 1. 准备测试数据
         String walletId = "test-wallet-123";
         String toAddress = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1";
         BigInteger amount = new BigInteger("1000000000000000000"); // 1 ETH
         String password = "test-password";
 
-        // 2. 构建转账请求
+        // 2. 创建测试钱包（解锁状态）
+        byte[] masterSecret = new byte[32];
+        new SecureRandom().nextBytes(masterSecret);
+
+        byte[] fromAddress = createTestAddress();
+
+        // 创建账户映射
+        Map<Integer, byte[]> accounts = new HashMap<>();
+        accounts.put(0, fromAddress);
+
+        Wallet testWallet = Wallet.builder()
+            .walletId(walletId)
+            .name("Test Wallet")
+            .type(Wallet.WalletType.SIMPLE)
+            .masterSecret(masterSecret)
+            .accounts(accounts)
+            .currentAccountIndex(0)
+            .locked(false)  // 已解锁用于测试
+            .createdAt(System.currentTimeMillis())
+            .build();
+
+        // 3. 创建测试账户（有足够余额）
+        Account senderAccount = Account.builder()
+            .address(fromAddress)
+            .nonce(BigInteger.ZERO)
+            .balance(new BigInteger("10000000000000000000")) // 10 ETH
+            .build();
+
+        // 4. Mock 钱包仓储行为
+        when(walletRepository.findById(walletId)).thenReturn(Optional.of(testWallet));
+        doNothing().when(walletRepository).update(any(Wallet.class));
+
+        // 5. Mock 账户仓储行为
+        when(accountRepository.query(anyString())).thenReturn(senderAccount);
+
+        // 6. 构建转账请求
         TransferRequest request = TransferRequest.builder()
             .walletId(walletId)
             .toAddress(toAddress)
@@ -63,20 +109,37 @@ class WalletServiceTest {
             .maxFeePerGas(new BigInteger("100000000000")) // 100 Gwei
             .maxPriorityFeePerGas(new BigInteger("2000000000")) // 2 Gwei
             .chainId(BigInteger.ONE) // 以太坊主网
+            .gasLimit(BigInteger.valueOf(21000))
             .password(password)
             .build();
 
-        // 3. 执行转账
-        TransferService transferService = createTransferService();
+        // 7. 执行转账
         TransferResponse response = transferService.transfer(request);
 
-        // 4. 验证结果
-        assertNotNull(response);
-        assertNotNull(response.getTransactionHash());
-        assertEquals(toAddress, response.getToAddress());
-        assertEquals(amount, response.getAmount());
-        assertEquals(TransferResponse.TransactionStatus.SIGNED, response.getStatus());
-        */
+        // 8. 验证结果
+        assertNotNull(response, "转账响应不应为空");
+        assertNotNull(response.getFromAddress(), "发送者地址不应为空");
+        assertEquals(toAddress.toLowerCase(), response.getToAddress().toLowerCase(),
+            "接收者地址应该匹配");
+        assertEquals(amount, response.getAmount(), "转账金额应该匹配");
+        assertEquals(TransferResponse.TransactionStatus.SIGNED, response.getStatus(),
+            "交易状态应该是已签名");
+        assertEquals(BigInteger.ZERO, response.getNonce(), "Nonce应该是0");
+        assertEquals(BigInteger.ONE, response.getChainId(), "ChainId应该是1");
+
+        // 9. 验证钱包被正确使用
+        verify(walletRepository, times(1)).findById(walletId);
+        verify(walletRepository, times(1)).update(any(Wallet.class));
+        verify(accountRepository, times(1)).query(anyString());
+    }
+
+    /**
+     * 辅助方法：创建测试地址
+     */
+    private byte[] createTestAddress() {
+        byte[] address = new byte[20];
+        new SecureRandom().nextBytes(address);
+        return address;
     }
 
     /**
